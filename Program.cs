@@ -15,8 +15,6 @@ class Program
     
     // Это объект с настройками работы бота. Здесь мы будем указывать, какие типы Update мы будем получать, Timeout бота и так далее.
     private static ReceiverOptions _receiverOptions;
-
-    private static Registration _registration;
     
     static async Task Main()
     {
@@ -75,104 +73,40 @@ class Program
                         case MessageType.Text:
                         {
                             // тут обрабатываем команду /start, остальные аналогично
-                            if(_registration.IsRegistration){
-                                _registration.Regirger(_botClient, message);
-                            }
                             if (message.Text == "/start")
                             {
-                                _registration.Start(_botClient, message);
+                                await Registration.Start(_botClient, message);
                             }
-
-                            if (message.Text == "/inline")
-                            {
-                                // Тут создаем нашу клавиатуру
-                                var inlineKeyboard = new InlineKeyboardMarkup(
-                                    new List<InlineKeyboardButton[]>() // здесь создаем лист (массив), который содрежит в себе массив из класса кнопок
-                                    {
-                                        // Каждый новый массив - это дополнительные строки,
-                                        // а каждая дополнительная кнопка в массиве - это добавление ряда
-
-                                        new InlineKeyboardButton[] // тут создаем массив кнопок
-                                        {
-                                            InlineKeyboardButton.WithUrl("Это кнопка с сайтом", "https://habr.com/"),
-                                            InlineKeyboardButton.WithCallbackData("А это просто кнопка", "button1"), 
-                                        },
-                                        new InlineKeyboardButton[]
-                                        {
-                                            InlineKeyboardButton.WithCallbackData("Тут еще одна", "button2"), 
-                                            InlineKeyboardButton.WithCallbackData("И здесь", "button3"), 
-                                        },
-                                    });
-                                
-                                await botClient.SendTextMessageAsync(
+                            if(message.Text == "Записаться на лабу"){
+                                if(await Registration.IsUserRegister(user)){
+                                    await botClient.SendTextMessageAsync(
                                     chat.Id,
-                                    "Это inline клавиатура!",
-                                    replyMarkup: inlineKeyboard); // Все клавиатуры передаются в параметр replyMarkup
-                                
-                                return;
-                            }
-
-                            if (message.Text == "/reply")
-                            {
-                                // Тут все аналогично Inline клавиатуре, только меняются классы
-                                // НО! Тут потребуется дополнительно указать один параметр, чтобы
-                                // клавиатура выглядела нормально, а не как абы что
-                                
-                                var replyKeyboard = new ReplyKeyboardMarkup(
-                                    new List<KeyboardButton[]>()
-                                    {
-                                        new KeyboardButton[]
-                                        {
-                                            new KeyboardButton("Привет!"),
-                                            new KeyboardButton("Пока!"),
-                                        },
-                                        new KeyboardButton[]
-                                        {
-                                            new KeyboardButton("Позвони мне!")
-                                        },
-                                        new KeyboardButton[]
-                                        {
-                                            new KeyboardButton("Напиши моему соседу!")
-                                        }
-                                    })
-                                {
-                                    // автоматическое изменение размера клавиатуры, если не стоит true,
-                                    // тогда клавиатура растягивается чуть ли не до луны,
-                                    // проверить можете сами
-                                    ResizeKeyboard = true,
-                                };
-                                
+                                    "Выберите дату для записи", replyMarkup: await InlineKeyboards.DateInlineKeyboard());
+                                    return;
+                                }
                                 await botClient.SendTextMessageAsync(
-                                    chat.Id,
-                                    "Это reply клавиатура!",
-                                    replyMarkup: replyKeyboard); // опять передаем клавиатуру в параметр replyMarkup
-
-                                return;
+                                chat.Id,
+                                "Вы не зарегистрированны напишите /start");
                             }
 
-                            if (message.Text == "Позвони мне!")
-                            {
+                            if(message.Text == "Посмотреть очередь"){
                                 await botClient.SendTextMessageAsync(
-                                    chat.Id,
-                                    "Хорошо, присылай номер!",
-                                    replyToMessageId: message.MessageId);
-
-                                return;
+                                chat.Id,
+                                "Выберите дату очереди", replyMarkup: await InlineKeyboards.DateLineInlineKeyboard());
+                                    
                             }
 
-                            if (message.Text == "Напиши моему соседу!")
+                            if (message.ReplyToMessage.Text == "Для регистации введите своё имя и фамилию")
                             {
-                                await botClient.SendTextMessageAsync(
-                                    chat.Id,
-                                    "А самому что, трудно что-ли ?",
-                                    replyToMessageId: message.MessageId);
-
-                                return;
+                                await Registration.Register(_botClient, message);
                             }
-                            
+
                             return;
                         }
-
+                        case MessageType.Document:
+                        {
+                            return;
+                        }
                         // Добавил default , чтобы показать вам разницу типов Message
                         default:
                         {
@@ -193,7 +127,7 @@ class Program
                     
                     // Аналогично и с Message мы можем получить информацию о чате, о пользователе и т.д.
                     var user = callbackQuery.From;
-
+                    var idButton = callbackQuery.Data.Split(':');
                     // Выводим на экран нажатие кнопки
                     Console.WriteLine($"{user.FirstName} ({user.Id}) нажал на кнопку: {callbackQuery.Data}");
                   
@@ -203,12 +137,24 @@ class Program
                     var chat = callbackQuery.Message.Chat; 
                     
                     // Добавляем блок switch для проверки кнопок
-                    switch (callbackQuery.Data)
+                    switch (idButton[0])
                     {
                         // Data - это придуманный нами id кнопки, мы его указывали в параметре
                         // callbackData при создании кнопок. У меня это button1, button2 и button3
 
-                        case "button1":
+                        case "date":
+                        {
+                            // В этом типе клавиатуры обязательно нужно использовать следующий метод
+                            await botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
+                            // Для того, чтобы отправить телеграмму запрос, что мы нажали на кнопку
+                            await EntryInLine.WriteDate(callbackQuery.From,idButton[1]);
+                            await botClient.SendTextMessageAsync(
+                                chat.Id,
+                                "Выберите Лабораторную, которую сдаёте:", replyMarkup: await InlineKeyboards.LabInlineKeyboard());
+                            return;
+                        }
+                        
+                        case "dateline":
                         {
                             // В этом типе клавиатуры обязательно нужно использовать следующий метод
                             await botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
@@ -216,26 +162,28 @@ class Program
                             
                             await botClient.SendTextMessageAsync(
                                 chat.Id,
-                                $"Вы нажали на {callbackQuery.Data}");
+                                $"Вот список на {idButton[1]}:");
+                            await LineSearch.SendLine(_botClient, chat, idButton[1]);
                             return;
                         }
-                        
-                        case "button2":
+
+                        case "lab":
                         {
                             // А здесь мы добавляем наш сообственный текст, который заменит слово "загрузка", когда мы нажмем на кнопку
                             await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Тут может быть ваш текст!");
-                            
+                        
+                            await EntryInLine.WriteLab(callbackQuery.From,idButton[1]);
                             await botClient.SendTextMessageAsync(
                                 chat.Id,
-                                $"Вы нажали на {callbackQuery.Data}");
+                               "Вышлите свой отчёт в ответ на это сообщение",replyMarkup: new ForceReplyMarkup());
                             return;
                         }
                         
-                        case "button3":
+                        case "file":
                         {
                             // А тут мы добавили еще showAlert, чтобы отобразить пользователю полноценное окно
                             await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "А это полноэкранный текст!", showAlert: true);
-                            
+                            ///файл?*???
                             await botClient.SendTextMessageAsync(
                                 chat.Id,
                                 $"Вы нажали на {callbackQuery.Data}");
